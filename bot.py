@@ -3,9 +3,16 @@ import re
 import time
 import requests
 from html.parser import HTMLParser
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+
+# ==========================================
 # SETTINGS
+# ==========================================
+
 URL = "https://instockradar.com/nl/store/denhaag/iphone-duo"
+
 WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
 MODEL = "iPhone Duo"
@@ -13,9 +20,23 @@ STORAGE = "256 GB"
 COLOR = "Night Sky"
 STORE = "Apple Den Haag"
 
+TIMEZONE = ZoneInfo("Europe/Amsterdam")
 
-# EXTRACT TEXT FROM WEBSITE
+
+# ==========================================
+# GET CURRENT TIME
+# ==========================================
+
+def current_time():
+    return datetime.now(TIMEZONE).strftime("%d-%m-%Y %H:%M:%S")
+
+
+# ==========================================
+# EXTRACT WEBSITE TEXT
+# ==========================================
+
 class TextParser(HTMLParser):
+
     def __init__(self):
         super().__init__()
         self.parts = []
@@ -27,9 +48,14 @@ class TextParser(HTMLParser):
         return " ".join(self.parts)
 
 
+# ==========================================
 # FETCH WEBSITE WITH RETRIES
+# ==========================================
+
 def get_with_retry(url):
+
     for attempt in range(1, 4):
+
         try:
             print(f"Checking website (attempt {attempt}/3)...")
 
@@ -42,9 +68,11 @@ def get_with_retry(url):
             )
 
             response.raise_for_status()
+
             return response
 
         except requests.RequestException as error:
+
             print(f"Attempt {attempt} failed: {error}")
 
             if attempt < 3:
@@ -54,8 +82,12 @@ def get_with_retry(url):
     raise RuntimeError("Website failed after 3 attempts")
 
 
+# ==========================================
 # CHECK EXACT IPHONE MODEL
+# ==========================================
+
 def check_stock():
+
     print("Checking iPhone Duo stock...")
 
     response = get_with_retry(URL)
@@ -65,15 +97,15 @@ def check_stock():
 
     text = re.sub(r"\s+", " ", parser.get_text())
 
-    # Find the exact model
     target = f"{STORAGE} {COLOR}"
 
     start = text.lower().find(target.lower())
 
     if start == -1:
-        raise RuntimeError("Could not find the exact iPhone model")
+        raise RuntimeError(
+            "Could not find the exact iPhone model"
+        )
 
-    # Only inspect this model's section
     section = text[start + len(target):]
 
     next_model = re.search(
@@ -96,43 +128,37 @@ def check_stock():
         print("IPHONE AVAILABLE!")
         return True
 
-    raise RuntimeError("Stock status could not be determined")
+    raise RuntimeError(
+        "Stock status could not be determined"
+    )
 
 
+# ==========================================
 # SEND DISCORD NOTIFICATION
-def send_discord_alert():
-    message = (
-        "🚨 @everyone IPHONE DUO IN STOCK!\n\n"
-        f"📱 {MODEL} - {STORAGE} - {COLOR}\n"
-        f"📍 {STORE}\n\n"
-        "🔥 CHECK AVAILABILITY NOW!\n"
-        f"🔗 {URL}"
-    )
+# ==========================================
 
-    response = requests.post(
-        WEBHOOK_URL,
-        json={
-            "content": message,
-            "allowed_mentions": {
-                "parse": ["everyone"]
-            }
-        },
-        timeout=20
-    )
+def send_discord_alert(status):
 
-    response.raise_for_status()
-    print("Discord notification sent!")
+    timestamp = current_time()
 
+    if status == "available":
 
-# MAIN BOT
-def main():
-    available = check_stock()
+        message = (
+            "🚨 @everyone IPHONE DUO IN STOCK! 🚨\n\n"
+            f"📱 {MODEL}\n"
+            f"💾 {STORAGE}\n"
+            f"🎨 {COLOR}\n"
+            f"📍 {STORE}\n\n"
+            "🟢 STATUS: IN STOCK!\n\n"
+            f"🕒 Checked: {timestamp}\n\n"
+            "🔥 ORDER OR RESERVE NOW!\n"
+            f"🔗 {URL}"
+        )
 
-    if available:
-        send_discord_alert()
-    else:
-        print("No notification needed.")
+        mentions = {"parse": ["everyone"]}
 
+    elif status == "unavailable":
 
-if __name__ == "__main__":
-    main()
+        message = (
+            "🔴 iPhone Duo Stock Check\n\n"
+            f"📱 {MODEL
