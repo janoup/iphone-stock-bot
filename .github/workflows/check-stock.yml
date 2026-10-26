@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install dependencies
+        run: python -m pip install requests
+
       - name: Check iPhone availability
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
