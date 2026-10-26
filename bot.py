@@ -1,12 +1,21 @@
 import os
 import re
-import json
-import urllib.request
+import time
+import requests
 from html.parser import HTMLParser
 
+# SETTINGS
 URL = "https://instockradar.com/nl/store/denhaag/iphone-duo"
+WEBHOOK_URL = os.environ["DISCORD_WEBHOOK_URL"]
 
-class PageText(HTMLParser):
+MODEL = "iPhone Duo"
+STORAGE = "256 GB"
+COLOR = "Night Sky"
+STORE = "Apple Den Haag"
+
+
+# EXTRACT TEXT FROM WEBSITE
+class TextParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.parts = []
@@ -14,70 +23,116 @@ class PageText(HTMLParser):
     def handle_data(self, data):
         self.parts.append(data)
 
+    def get_text(self):
+        return " ".join(self.parts)
+
+
+# FETCH WEBSITE WITH RETRIES
+def get_with_retry(url):
+    for attempt in range(1, 4):
+        try:
+            print(f"Checking website (attempt {attempt}/3)...")
+
+            response = requests.get(
+                url,
+                timeout=20,
+                headers={
+                    "User-Agent": "Mozilla/5.0"
+                }
+            )
+
+            response.raise_for_status()
+            return response
+
+        except requests.RequestException as error:
+            print(f"Attempt {attempt} failed: {error}")
+
+            if attempt < 3:
+                print("Retrying in 5 seconds...")
+                time.sleep(5)
+
+    raise RuntimeError("Website failed after 3 attempts")
+
+
+# CHECK EXACT IPHONE MODEL
 def check_stock():
-    request = urllib.request.Request(
-        URL,
-        headers={"User-Agent": "Mozilla/5.0"}
-    )
+    print("Checking iPhone Duo stock...")
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        html = response.read().decode("utf-8")
+    response = get_with_retry(URL)
 
-    parser = PageText()
-    parser.feed(html)
+    parser = TextParser()
+    parser.feed(response.text)
 
-    text = re.sub(r"\s+", " ", " ".join(parser.parts))
+    text = re.sub(r"\s+", " ", parser.get_text())
 
-    match = re.search(
-        r"256 GB Night Sky(.*?)(?=256 GB Star White)",
-        text,
+    # Find the exact model
+    target = f"{STORAGE} {COLOR}"
+
+    start = text.lower().find(target.lower())
+
+    if start == -1:
+        raise RuntimeError("Could not find the exact iPhone model")
+
+    # Only inspect this model's section
+    section = text[start + len(target):]
+
+    next_model = re.search(
+        r"(?:256|512)\s*GB\s*(?:Night Sky|Star White)|"
+        r"(?:1|2)\s*TB\s*(?:Night Sky|Star White)",
+        section,
         re.IGNORECASE
     )
 
-    if not match:
-        raise ValueError("Cannot identify exact iPhone model")
+    if next_model:
+        section = section[:next_model.start()]
 
-    section = match.group(1).lower()
+    section = section.lower()
 
     if "uitverkocht" in section:
+        print("Still sold out.")
         return False
 
     if "op voorraad" in section:
+        print("IPHONE AVAILABLE!")
         return True
 
-    raise ValueError("Cannot determine stock status")
+    raise RuntimeError("Stock status could not be determined")
 
-def notify():
-    webhook = os.environ["DISCORD_WEBHOOK_URL"]
 
-    message = {
-        "content": (
-            "🚨 @everyone IPHONE DUO IN STOCK!\n"
-            "📱 iPhone Duo - 256 GB - Night Sky\n"
-            "📍 Apple Den Haag\n"
-            f"🔗 {URL}\n"
-            "CHECK AVAILABILITY NOW!"
-        )
-    }
-
-    request = urllib.request.Request(
-        webhook,
-        data=json.dumps(message).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST"
+# SEND DISCORD NOTIFICATION
+def send_discord_alert():
+    message = (
+        "🚨 @everyone IPHONE DUO IN STOCK!\n\n"
+        f"📱 {MODEL} - {STORAGE} - {COLOR}\n"
+        f"📍 {STORE}\n\n"
+        "🔥 CHECK AVAILABILITY NOW!\n"
+        f"🔗 {URL}"
     )
 
-    urllib.request.urlopen(request, timeout=30).close()
+    response = requests.post(
+        WEBHOOK_URL,
+        json={
+            "content": message,
+            "allowed_mentions": {
+                "parse": ["everyone"]
+            }
+        },
+        timeout=20
+    )
+
+    response.raise_for_status()
+    print("Discord notification sent!")
+
+
+# MAIN BOT
+def main():
+    available = check_stock()
+
+    if available:
+        send_discord_alert()
+    else:
+        print("No notification needed.")
+
 
 if __name__ == "__main__":
-    print("Checking iPhone Duo stock...")
-
-    try:
-        if check_stock():
-            print("AVAILABLE!")
-            notify()
-        else:
-            print("Still sold out.")
-    except Exception as error:
-        print(f"Stock check failed: {error}")
-        raise
+    main()
