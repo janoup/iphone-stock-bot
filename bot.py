@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 
 # ==========================================
-# SETTINGS
+# IPHONE DUO STOCK BOT SETTINGS
 # ==========================================
 
 URL = "https://instockradar.com/nl/store/denhaag/iphone-duo"
@@ -24,15 +24,17 @@ TIMEZONE = ZoneInfo("Europe/Amsterdam")
 
 
 # ==========================================
-# GET CURRENT TIME
+# CURRENT TIME
 # ==========================================
 
 def current_time():
-    return datetime.now(TIMEZONE).strftime("%d-%m-%Y %H:%M:%S")
+    return datetime.now(TIMEZONE).strftime(
+        "%d-%m-%Y %H:%M:%S"
+    )
 
 
 # ==========================================
-# EXTRACT WEBSITE TEXT
+# WEBSITE TEXT PARSER
 # ==========================================
 
 class TextParser(HTMLParser):
@@ -57,7 +59,7 @@ def get_with_retry(url):
     for attempt in range(1, 4):
 
         try:
-            print(f"Checking website (attempt {attempt}/3)...")
+            print(f"Website attempt {attempt}/3")
 
             response = requests.get(
                 url,
@@ -79,11 +81,13 @@ def get_with_retry(url):
                 print("Retrying in 5 seconds...")
                 time.sleep(5)
 
-    raise RuntimeError("Website failed after 3 attempts")
+    raise RuntimeError(
+        "Website unavailable after 3 attempts"
+    )
 
 
 # ==========================================
-# CHECK EXACT IPHONE MODEL
+# CHECK IPHONE STOCK
 # ==========================================
 
 def check_stock():
@@ -95,7 +99,11 @@ def check_stock():
     parser = TextParser()
     parser.feed(response.text)
 
-    text = re.sub(r"\s+", " ", parser.get_text())
+    text = re.sub(
+        r"\s+",
+        " ",
+        parser.get_text()
+    )
 
     target = f"{STORAGE} {COLOR}"
 
@@ -103,7 +111,7 @@ def check_stock():
 
     if start == -1:
         raise RuntimeError(
-            "Could not find the exact iPhone model"
+            "Could not locate exact iPhone variant"
         )
 
     section = text[start + len(target):]
@@ -121,44 +129,4 @@ def check_stock():
     section = section.lower()
 
     if "uitverkocht" in section:
-        print("Still sold out.")
-        return False
-
-    if "op voorraad" in section:
-        print("IPHONE AVAILABLE!")
-        return True
-
-    raise RuntimeError(
-        "Stock status could not be determined"
-    )
-
-
-# ==========================================
-# SEND DISCORD NOTIFICATION
-# ==========================================
-
-def send_discord_alert(status):
-
-    timestamp = current_time()
-
-    if status == "available":
-
-        message = (
-            "🚨 @everyone IPHONE DUO IN STOCK! 🚨\n\n"
-            f"📱 {MODEL}\n"
-            f"💾 {STORAGE}\n"
-            f"🎨 {COLOR}\n"
-            f"📍 {STORE}\n\n"
-            "🟢 STATUS: IN STOCK!\n\n"
-            f"🕒 Checked: {timestamp}\n\n"
-            "🔥 ORDER OR RESERVE NOW!\n"
-            f"🔗 {URL}"
-        )
-
-        mentions = {"parse": ["everyone"]}
-
-    elif status == "unavailable":
-
-        message = (
-            "🔴 iPhone Duo Stock Check\n\n"
-            f"📱 {MODEL
+        print("ST
