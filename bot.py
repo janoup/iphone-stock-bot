@@ -129,4 +129,11 @@ def check_stock():
     section = section.lower()
 
     if "uitverkocht" in section:
-        print("ST
+    print("STILL OUT OF STOCK")
+    return False
+
+if "op voorraad" in section:
+    print("IPHONE IS IN STOCK!")
+    return True
+
+raise RuntimeError("Stock status could not be determined")
